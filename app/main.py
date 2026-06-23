@@ -6,7 +6,7 @@ import base64
 import os
 
 from fastapi.responses import HTMLResponse
-from database import db
+from .database import db
 from datetime import datetime
 
 @asynccontextmanager
