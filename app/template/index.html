@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeVector Product Browser</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans min-h-screen">
+
+    <div class="max-w-6xl mx-auto px-4 py-8">
+        <header class="mb-8 border-b border-gray-200 pb-6 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Product Catalog</h1>
+                <p class="text-sm text-gray-500 mt-1">High-performance cursor pagination over 200k records</p>
+            </div>
+            <span class="bg-indigo-100 text-indigo-800 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
+                Backend Live
+            </span>
+        </header>
+
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-wrap items-center gap-4">
+            <div class="flex flex-col">
+                <label for="categorySelect" class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
+                <select id="categorySelect" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 p-2.5 min-w-[200px]">
+                    <option value="Electronics">Electronics</option>
+                    <option value="Clothing">Clothing</option>
+                    <option value="Home & Kitchen">Home & Kitchen</option>
+                    <option value="Books">Books</option>
+                    <option value="Beauty">Beauty</option>
+                    <option value="Sports">Sports</option>
+                </select>
+            </div>
+            <div class="flex flex-col">
+                <label for="limitSelect" class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Per Page</label>
+                <select id="limitSelect" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 p-2.5 w-[100px]">
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <button id="applyFiltersBtn" class="mt-5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm px-5 py-2.5 rounded-lg transition-colors shadow-sm">
+                Apply Filters
+            </button>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                        <th class="p-4">ID</th>
+                        <th class="p-4">Product Name</th>
+                        <th class="p-4">Category</th>
+                        <th class="p-4">Price</th>
+                        <th class="p-4">Created at</th>
+                    </tr>
+                </thead>
+                <tbody id="productsTableBody" class="divide-y divide-gray-100 text-sm text-gray-700">
+                    </tbody>
+            </table>
+            
+            <div id="loadingIndicator" class="hidden py-12 text-center text-gray-500">
+                <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto mb-2" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Scanning database index...</span>
+            </div>
+        </div>
+
+        <div class="flex justify-between items-center mt-4 px-2">
+            <div class="text-sm text-gray-500">
+                Showing <span id="currentBatchCount" class="font-medium text-gray-800">0</span> items this page.
+            </div>
+            <div class="flex gap-2">
+                <button id="resetBtn" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium text-sm px-4 py-2 rounded-lg transition-colors">
+                    Reset to Page 1
+                </button>
+                <button id="nextBtn" class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white font-medium text-sm px-5 py-2 rounded-lg transition-colors shadow-sm disabled:cursor-not-allowed">
+                    Next Page &rarr;
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = "http://127.0.0.1:8000/products";
+        
+        // Track core pagination state variables
+        let currentCursor = null;
+        let cursorHistory = []; // Extensible stack for going backwards if needed
+
+        // DOM elements cache references
+        const tableBody = document.getElementById("productsTableBody");
+        const loadingIndicator = document.getElementById("loadingIndicator");
+        const categorySelect = document.getElementById("categorySelect");
+        const limitSelect = document.getElementById("limitSelect");
+        const applyFiltersBtn = document.getElementById("applyFiltersBtn");
+        const nextBtn = document.getElementById("nextBtn");
+        const resetBtn = document.getElementById("resetBtn");
+        const currentBatchCount = document.getElementById("currentBatchCount");
+
+        async function fetchProducts(reset = false) {
+            if (reset) {
+                currentCursor = null;
+                cursorHistory = [];
+            }
+
+            // Toggle table loader state visibility
+            tableBody.innerHTML = "";
+            loadingIndicator.classList.remove("hidden");
+            nextBtn.disabled = true;
+
+            const category = categorySelect.value;
+            const limit = limitSelect.value;
+            
+            // Build URL parameters
+            let url = `${API_BASE_URL}?category=${encodeURIComponent(category)}&limit=${limit}`;
+            if (currentCursor) {
+                url += `&cursor=${encodeURIComponent(currentCursor)}`;
+            }
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Server rejected query request layout execution context.");
+                
+                const data = await response.json();
+                
+                // Inject elements safely onto UI template grid
+                loadingIndicator.classList.add("hidden");
+                currentBatchCount.innerText = data.results.length;
+
+                if (data.results.length === 0) {
+                    tableBody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-400">No products found matching this filter criteria.</td></tr>`;
+                    return;
+                }
+
+                data.results.forEach(product => {
+                    const row = document.createElement("tr");
+                    row.className = "hover:bg-gray-50 transition-colors";
+                    row.innerHTML = `
+                        <td class="p-4 font-mono font-medium text-gray-400 text-xs">${product.id}</td>
+                        <td class="p-4 font-semibold text-gray-900">${product.name}</td>
+                        <td class="p-4"><span class="bg-gray-100 text-gray-800 text-xs px-2.5 py-0.5 rounded-md font-medium">${product.category}</span></td>
+                        <td class="p-4 font-bold text-gray-900">$${product.price.toFixed(2)}</td>
+                        <td class="p-4 text-xs text-gray-500">${new Date(product.created_at).toLocaleString()}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+
+                // Update navigation cursor state pointer tracks
+                if (data.next_cursor) {
+                    currentCursor = data.next_cursor;
+                    nextBtn.disabled = false;
+                } else {
+                    currentCursor = null;
+                    nextBtn.disabled = true;
+                }
+
+            } catch (error) {
+                loadingIndicator.classList.add("hidden");
+                tableBody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-red-500 font-medium">⚠️ Error connecting to FastAPI local runtime instance loop. Make sure your server is online!</td></tr>`;
+                console.error(error);
+            }
+        }
+
+        // Setup DOM Event Listeners mapping loops
+        applyFiltersBtn.addEventListener("click", () => fetchProducts(true));
+        resetBtn.addEventListener("click", () => fetchProducts(true));
+        nextBtn.addEventListener("click", () => fetchProducts(false));
+
+        // Initial entry run invocation loop load state on dashboard boot
+        document.addEventListener("DOMContentLoaded", () => fetchProducts(true));
+    </script>
+</body>
+</html>
