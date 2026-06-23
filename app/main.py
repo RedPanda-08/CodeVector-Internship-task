@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import Optional
 import base64
+import os
+
+from fastapi.responses import HTMLResponse
 from database import db
 from datetime import datetime
 
@@ -92,3 +95,9 @@ async def get_products(
         "count": len(products),
         "next_cursor": next_cursor
     }
+@app.get("/", response_class=HTMLResponse)
+async def read_index():
+    html_content = os.path.join(os.path.dirname(__file__), "template", "index.html")
+
+    with open(html_content, "r", encoding="utf-8") as f:
+        return f.read()
